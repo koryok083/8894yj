@@ -1,15 +1,24 @@
-name: Android CI
+name: Android CI/CD
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
-  release:
-    types: [created]
+  workflow_dispatch:  # Manual trigger
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v1
+
   build:
+    needs: validate
     runs-on: ubuntu-latest
     
     steps:
@@ -24,37 +33,64 @@ jobs:
         
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-      
+      with:
+        cmdline-tools-version: 'latest'
+        build-tools-version: '34.0.0'
+        platform-version: '34'
+        ndk-version: '25.2.9519653'
+        
     - name: Grant execute permission for gradlew
       run: |
         ls -la
         chmod +x ./gradlew
+        
+    - name: Cache Gradle dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
       
-    - name: Validate Gradle Wrapper
-      uses: gradle/wrapper-validation-action@v1
-      
-    - name: Build with Gradle
+    - name: Build Debug APK
       run: |
-        ./gradlew assembleDebug
-        ./gradlew assembleRelease
+        ./gradlew assembleDebug --stacktrace
+      
+    - name: Build Release APK
+      run: |
+        ./gradlew assembleRelease --stacktrace
       
     - name: Run tests
-      run: ./gradlew test
+      run: ./gradlew test --stacktrace
       
-    - name: Upload Debug APK artifact
+    - name: Upload Debug APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug-apk
+        name: tethering-router-debug
         path: app/build/outputs/apk/debug/*.apk
         retention-days: 7
         
-    - name: Upload Release APK artifact
+    - name: Upload Release APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: app-release-apk
+        name: tethering-router-release
         path: app/build/outputs/apk/release/*.apk
         retention-days: 7
         
+    - name: Upload Build Reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-reports
+        path: |
+          app/build/reports/
+          app/build/outputs/
+        retention-days: 7
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -73,17 +109,36 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
-    - name: Create Release APK
+    - name: Build Release APK with version
       run: |
         chmod +x ./gradlew
         ./gradlew assembleRelease
       
-    - name: Upload Release APK
+    - name: Get version from gradle
+      id: version
+      run: |
+        VERSION=$(grep "versionName" app/build.gradle.kts | cut -d'"' -f2)
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: v${{ env.VERSION }}
+        name: Tethering Router v${{ env.VERSION }}
+        body: |
+          Android Tethering Router Application
+          
+          Features:
+          - WiFi Tethering/Hotspot
+          - Web Dashboard (port 8080)
+          - Real-time monitoring
+          - Background service
+          
+          Download and install the APK below.
         files: app/build/outputs/apk/release/*.apk
-        generate_release_notes: true
         draft: false
         prerelease: false
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
