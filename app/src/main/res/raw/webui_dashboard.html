@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tethering Router Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .status-card {
+            padding: 30px;
+            border-bottom: 1px solid #eee;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 30px;
+        }
+        .stat-box {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border-left: 4px solid #4facfe;
+        }
+        .btn-group {
+            padding: 30px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        button {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-start {
+            background: linear-gradient(135deg, #42e695 0%, #3bb2b8 100%);
+            color: white;
+        }
+        .btn-stop {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .active {
+            background: #42e695;
+            box-shadow: 0 0 10px #42e695;
+        }
+        .inactive {
+            background: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📡 Tethering Router</h1>
+            <p>Android sebagai Modem/Router</p>
+        </div>
+        
+        <div class="status-card">
+            <h2>Status: 
+                <span id="statusIndicator" class="status-indicator inactive"></span>
+                <span id="statusText">Loading...</span>
+            </h2>
+            <p>IP Address: <span id="ipAddress">-</span></p>
+            <p>SSID: <span id="ssid">-</span></p>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-box">
+                <h3>Connected Devices</h3>
+                <p id="clientsCount" style="font-size: 36px; margin: 10px 0;">0</p>
+            </div>
+            <div class="stat-box">
+                <h3>Port</h3>
+                <p style="font-size: 36px; margin: 10px 0;">8080</p>
+            </div>
+        </div>
+        
+        <div class="btn-group">
+            <button class="btn-start" onclick="startTethering()">Start Tethering</button>
+            <button class="btn-stop" onclick="stopTethering()">Stop Tethering</button>
+        </div>
+    </div>
+
+    <script>
+        let statusInterval;
+        
+        function updateStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    const indicator = document.getElementById('statusIndicator');
+                    const statusText = document.getElementById('statusText');
+                    const clientsCount = document.getElementById('clientsCount');
+                    const ipAddress = document.getElementById('ipAddress');
+                    const ssid = document.getElementById('ssid');
+                    
+                    if (data.tethering_active) {
+                        indicator.className = 'status-indicator active';
+                        statusText.textContent = 'ACTIVE';
+                    } else {
+                        indicator.className = 'status-indicator inactive';
+                        statusText.textContent = 'INACTIVE';
+                    }
+                    
+                    clientsCount.textContent = data.connected_clients;
+                    ipAddress.textContent = data.ip_address;
+                    ssid.textContent = data.ssid;
+                })
+                .catch(error => console.error('Error:', error));
+        }
+        
+        function startTethering() {
+            fetch('/api/start')
+                .then(() => {
+                    setTimeout(updateStatus, 2000);
+                });
+        }
+        
+        function stopTethering() {
+            fetch('/api/stop')
+                .then(() => {
+                    setTimeout(updateStatus, 2000);
+                });
+        }
+        
+        // Update status every 3 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            updateStatus();
+            statusInterval = setInterval(updateStatus, 3000);
+        });
+        
+        document.addEventListener('beforeunload', function() {
+            clearInterval(statusInterval);
+        });
+    </script>
+</body>
+</html>
